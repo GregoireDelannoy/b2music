@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Music</title>
+    <link rel="stylesheet" href="dist/themes/default/style.min.css" />
+</head>
+
+<body>
+    <div>
+        <figure>
+            <figcaption id="selected_filename">Click on a file</figcaption>
+            <audio style="width:100%" id="selected_audio" controls src="#"></audio>
+        </figure>
+    </div>
+    <div>
+        <button onclick="clearPlaylist();">Clear Playlist</button>
+        <button onclick="next();">Play next</button>
+        <div style="border: 1px solid black;">
+            <p>Playlist:</p>
+            <ul id="playlist"></ul>
+        </div>
+    </div>
+    <div id="jstree"></div>
+    <script src="dist/jquery.min.js"></script>
+    <script src="dist/jstree.min.js"></script>
+    <script>
+        $.getJSON("tree.json", function (data) {
+            $("#jstree").jstree({
+                "core": {
+                    "data": data,
+                }
+            });
+            $("#jstree").on("changed.jstree", function (e, data) {
+                if (data.node.children.length == 0) {
+                    let el = document.createElement("li");
+                    el.textContent = data.node.text;
+                    el.attributes["data-node-id"] = data.node.id;
+                    el.attributes["data-node-text"] = data.node.text;
+                    $("#playlist").append(el);
+                    if ($("#selected_audio").attr("src") == "#") {
+                        next();
+                    }
+                } else {
+                    if ($("#jstree").jstree().is_open(data.node.id)) {
+                        $("#jstree").jstree().close_node(data.node.id);
+                    } else {
+                        $("#jstree").jstree().open_node(data.node.id);
+                    }
+                }
+            });
+        });
+
+        $("#selected_audio").on("ended", next);
+
+        function clearPlaylist() {
+            $("#playlist").empty();
+        }
+
+        function next() {
+            const children = $("#playlist").children();
+            if (children.length == 0) {
+                $("#selected_audio").attr("src", "#");
+                $("#selected_filename").text("Nothing in playlist. Click on file to append");
+            } else {
+                const el = children[0];
+                $("#selected_audio").attr("src", "/file?name=" + el.attributes["data-node-id"]);
+                $("#selected_filename").text("Currently playing: " + el.attributes["data-node-text"]);
+                $("#selected_audio")[0].play();
+                el.remove();
+            }
+        }
+    </script>
+</body>
+
+</html>

@@ -65,7 +65,7 @@
                 $("#selected_filename").text("Nothing in playlist. Click on file to append");
             } else {
                 const el = children[0];
-                $("#selected_audio").attr("src", "/file?name=" + el.attributes["data-node-id"]);
+                $("#selected_audio").attr("src", "file?name=" + el.attributes["data-node-id"]);
                 $("#selected_filename").text("Currently playing: " + el.attributes["data-node-text"]);
                 $("#selected_audio")[0].play();
                 el.remove();

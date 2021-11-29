@@ -34,15 +34,21 @@
             });
             $("#jstree").on("changed.jstree", function (e, data) {
                 if (data.node.children.length == 0) {
+                    // This is a leaf, thus an actual music file
                     let el = document.createElement("li");
                     el.textContent = data.node.text;
-                    el.attributes["data-node-id"] = data.node.id;
                     el.attributes["data-node-text"] = data.node.text;
-                    $("#playlist").append(el);
-                    if ($("#selected_audio").attr("src") == "#") {
-                        next();
-                    }
+                    fetch("file?name=" + data.node.id)
+                        .then(response => response.blob())
+                        .then(blob => {
+                            el.attributes["data-node-url"] = URL.createObjectURL(blob);
+                            $("#playlist").append(el);
+                            if ($("#selected_audio").attr("src") == "#") {
+                                next();
+                            }
+                        })
                 } else {
+                    // Still a branch, continue exploring tree
                     if ($("#jstree").jstree().is_open(data.node.id)) {
                         $("#jstree").jstree().close_node(data.node.id);
                     } else {
@@ -55,17 +61,22 @@
         $("#selected_audio").on("ended", next);
 
         function clearPlaylist() {
+            const children = $("#playlist").children();
+            children.each((i, el) => {
+                URL.revokeObjectURL(el.attributes["data-node-url"]);
+            });
             $("#playlist").empty();
         }
 
         function next() {
+            URL.revokeObjectURL($("#selected_audio").attr("src"))
             const children = $("#playlist").children();
             if (children.length == 0) {
                 $("#selected_audio").attr("src", "#");
                 $("#selected_filename").text("Nothing in playlist. Click on file to append");
             } else {
                 const el = children[0];
-                $("#selected_audio").attr("src", "file?name=" + el.attributes["data-node-id"]);
+                $("#selected_audio").attr("src", el.attributes["data-node-url"]);
                 $("#selected_filename").text("Currently playing: " + el.attributes["data-node-text"]);
                 $("#selected_audio")[0].play();
                 el.remove();

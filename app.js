@@ -1,7 +1,6 @@
 const express = require("express");
 const B2 = require("backblaze-b2");
 require("dotenv").config();
-const { promises: fs } = require("fs");
 const app = express();
 
 const b2 = new B2({
@@ -9,10 +8,9 @@ const b2 = new B2({
     applicationKey: process.env.APPLICATION_KEY,
 });
 const BUCKET_ID = process.env.BUCKET_ID;
-const LOCAL_DB_FILE = "filenames.json";
+const URL_PREFIX = process.env.URL_PREFIX;
 
-const LOCAL_TREE_FILE = "public/tree.json";
-const LISTEN_PORT = 8004;
+const LISTEN_PORT = process.env.LISTEN_PORT;
 
 async function b2FilenamesToLocal() {
     await b2.authorize(); // must authorize first (authorization lasts 24 hrs)
@@ -22,7 +20,7 @@ async function b2FilenamesToLocal() {
         const res = await b2.listFileNames({
             bucketId: BUCKET_ID,
             startFileName: nextFileName,
-            maxFileCount: 1000,
+            maxFileCount: 10000,
             delimiter: "",
             prefix: ""
         });
@@ -33,11 +31,10 @@ async function b2FilenamesToLocal() {
 
         allFilenames = allFilenames.concat(res.data.files);
     }
-    await fs.writeFile(LOCAL_DB_FILE, JSON.stringify(allFilenames));
     return allFilenames;
 }
 
-async function translateForJsTree(data) {
+function translateForJsTree(data) {
     let res = [];
     for (let d of data) {
         if (!["audio/mpeg", "audio/ogg", "audio/flac", "audio/x-wav"].includes(d.contentType)) {
@@ -56,70 +53,34 @@ async function translateForJsTree(data) {
             }
         }
         res.push({
-            "icon": "jstree-file",
+            "url": URL_PREFIX + encodeURIComponent(d.fileName),
             "id": name,
             "text": parents[parents.length - 1],
             "parent": parents.length == 1 ? "#" : parents.slice(0, parents.length - 1).join("/"),
         })
     }
-    await fs.writeFile(LOCAL_TREE_FILE, JSON.stringify(res));
     return res;
 }
 
-
-let lastAuthorization = 0;
-async function authorizeIfNeeded() {
-    const now = Date.now();
-    if (now - lastAuthorization > 3600000) {
-        await b2.authorize();
-        lastAuthorization = now;
-    }
-}
-
-async function getFile(id) {
-    await authorizeIfNeeded();
-    return b2.downloadFileById({
-        fileId: id,
-        responseType: "stream", // options are as in axios: "arraybuffer", "blob", "document", "json", "text", "stream"
-    });
-}
-
 (async () => {
-    let DB = null;
-    try {
-        DB = JSON.parse(await fs.readFile(LOCAL_DB_FILE));
-    } catch (err) {
-        console.error(err);
-        console.error("Unable to read or parse local file for DB. Query new from b2");
-        DB = await b2FilenamesToLocal();
-    }
+    let tree = null;
 
-    try {
-        await fs.access(LOCAL_TREE_FILE)
-    } catch (err) {
-        console.error(err);
-        console.error("Unable to access local tree file. Write new one.")
-        await translateForJsTree(DB);
-    }
+    app.get("/refresh", async(req, res) => {
+        tree = null;
+        res.redirect("/");
+    });
 
-    app.get("/file", async (req, res) => {
-        console.log("Got a FILE request:", req.query);
-        const found = DB.find(i => i.fileName == req.query.name);
-        if (!found) {
-            res.sendStatus(404);
-        } else {
-            let b2file = await getFile(found.fileId);
-            res.writeHead(200, {
-                "Content-Type": found.contentType,
-                "Content-Length": found.contentLength
-            });
-            b2file.data.pipe(res);
+    app.get("/tree.json", async (req, res) => {
+        if (tree == null){
+            let all_filenames = await b2FilenamesToLocal();
+            tree = translateForJsTree(all_filenames)
         }
+        res.json(tree);
     });
     
     app.use(express.static("public"));
     
     app.listen(LISTEN_PORT, function () {
-        console.log("listening on *:8004");
+        console.log(`listening on *:${LISTEN_PORT}`);
     });
 })();

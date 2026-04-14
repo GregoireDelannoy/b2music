@@ -1,88 +1,744 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
-    <meta charset="utf-8">
-    <title>Music</title>
-    <link rel="stylesheet" href="dist/themes/default/style.min.css" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Player</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --border: #2a2a2a;
+    --text: #e8e8e8;
+    --muted: #666;
+    --accent: #c8ff00;
+    --danger: #ff4444;
+    --font-mono: ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
+    --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    min-height: 100dvh;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  button {
+    background: none;
+    border: none;
+    color: var(--text);
+    cursor: pointer;
+    padding: 8px;
+    line-height: 1;
+    font-family: var(--font-mono);
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:active { opacity: .55; }
+
+  /* NOW PLAYING */
+  #now-playing {
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .track-title {
+    font-size: 15px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 10px;
+  }
+
+  .seek-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .time {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    min-width: 34px;
+    flex-shrink: 0;
+  }
+  .time.right { text-align: right; }
+
+  .seek-track {
+    flex: 1;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    position: relative;
+    touch-action: none;
+  }
+
+  .seek-track::before {
+    content: '';
+    position: absolute;
+    left: 0; right: 0;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+  }
+
+  .seek-fill {
+    position: absolute;
+    left: 0;
+    height: 3px;
+    background: var(--accent);
+    border-radius: 2px;
+    width: 0%;
+    pointer-events: none;
+  }
+
+  .seek-thumb {
+    position: absolute;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    left: 0%;
+    transform: translateX(-50%);
+    pointer-events: none;
+    transition: transform 0.05s;
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  .btn-play {
+    width: 44px; height: 44px;
+    background: var(--accent);
+    color: #000;
+    border-radius: 50%;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .btn-icon {
+    color: var(--muted);
+    font-size: 18px;
+    width: 40px; height: 40px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0;
+  }
+
+  /* SECTION HEADERS */
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    position: sticky;
+    z-index: 9;
+  }
+
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .badge {
+    background: var(--border);
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: 10px;
+  }
+
+  .section-right {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .btn-sm {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--muted);
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+  }
+
+  .chevron { font-size: 11px; color: var(--muted); }
+
+  .section-body { display: block; }
+  .section-body.collapsed { display: none; }
+
+  /* TREE BROWSER */
+  #browser-body {
+    border-bottom: 1px solid var(--border);
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+
+  .tree-node {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid #1c1c1c;
+  }
+
+  .tree-indent { flex-shrink: 0; }
+
+  .tree-toggle {
+    flex-shrink: 0;
+    width: 28px; height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted);
+    font-size: 10px;
+    padding: 0;
+  }
+
+  .tree-label {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 8px 8px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 13px;
+    cursor: default;
+  }
+
+  .tree-node.is-folder .tree-label { cursor: pointer; }
+  .tree-node.is-file .tree-label { color: #aaa; cursor: pointer; }
+  .tree-node.is-file .tree-label:hover { color: var(--accent); }
+
+  .tree-add {
+    flex-shrink: 0;
+    color: var(--muted);
+    font-size: 16px;
+    width: 36px; height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0;
+  }
+  .tree-add:active { color: var(--accent); }
+
+  /* PLAYLIST */
+  #track-list { list-style: none; }
+
+  .track-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .track-item.dragging { opacity: .3; }
+  .track-item.drag-over { border-top: 2px solid var(--accent); }
+  .track-item.active-track .item-title { color: var(--accent); }
+
+  .drag-handle {
+    color: var(--muted);
+    font-size: 14px;
+    cursor: grab;
+    padding: 4px 2px;
+    touch-action: none;
+    flex-shrink: 0;
+  }
+
+  .item-num {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    min-width: 18px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .item-title {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 13px;
+  }
+
+  .btn-delete {
+    color: var(--muted);
+    font-size: 15px;
+    padding: 4px 6px;
+    flex-shrink: 0;
+  }
+  .btn-delete:active { color: var(--danger); }
+
+  .empty-msg {
+    padding: 28px 16px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    font-family: var(--font-mono);
+  }
+</style>
 </head>
-
 <body>
-    <div>
-        <figure>
-            <figcaption id="selected_filename">Click on a file</figcaption>
-            <audio style="width:100%" id="selected_audio" controls src="#"></audio>
-        </figure>
+
+<!-- NOW PLAYING -->
+<section id="now-playing">
+  <div class="track-title" id="np-title">No track selected</div>
+  <div class="seek-row">
+    <span class="time" id="time-cur">0:00</span>
+    <div id="seek-track" class="seek-track">
+      <div id="seek-fill" class="seek-fill"></div>
+      <div id="seek-thumb" class="seek-thumb"></div>
     </div>
-    <div>
-        <button onclick="clearPlaylist();">Clear Playlist</button>
-        <button onclick="next();">Play next</button>
-        <div style="border: 1px solid black;">
-            <p>Playlist:</p>
-            <ul id="playlist"></ul>
-        </div>
-    </div>
-    <div id="jstree"></div>
-    <script src="dist/jquery.min.js"></script>
-    <script src="dist/jstree.min.js"></script>
-    <script>
-        $.getJSON("tree.json", function (data) {
-            $("#jstree").jstree({
-                "core": {
-                    "data": data,
-                }
-            });
-            $("#jstree").on("changed.jstree", function (e, data) {
-                if (data.node.children.length == 0) {
-                    // This is a leaf, thus an actual music file
-                    let el = document.createElement("li");
-                    el.textContent = data.node.text;
-                    el.attributes["data-node-text"] = data.node.text;
-                    fetch("file?name=" + data.node.id)
-                        .then(response => response.blob())
-                        .then(blob => {
-                            el.attributes["data-node-url"] = URL.createObjectURL(blob);
-                            $("#playlist").append(el);
-                            if ($("#selected_audio").attr("src") == "#") {
-                                next();
-                            }
-                        })
-                } else {
-                    // Still a branch, continue exploring tree
-                    if ($("#jstree").jstree().is_open(data.node.id)) {
-                        $("#jstree").jstree().close_node(data.node.id);
-                    } else {
-                        $("#jstree").jstree().open_node(data.node.id);
-                    }
-                }
-            });
-        });
+    <span class="time right" id="time-dur">0:00</span>
+  </div>
+  <div class="controls">
+    <button class="btn-icon" id="btn-prev" title="Previous">⏮</button>
+    <button class="btn-play" id="btn-play" title="Play/Pause">
+    <svg id="icon-play" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><polygon points="6,4 20,12 6,20"/></svg>
+    <svg id="icon-pause" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style="display:none"><rect x="5" y="4" width="4" height="16" rx="1"/><rect x="15" y="4" width="4" height="16" rx="1"/></svg>
+  </button>
+    <button class="btn-icon" id="btn-next" title="Next">⏭</button>
+  </div>
+</section>
 
-        $("#selected_audio").on("ended", next);
+<!-- TREE BROWSER -->
+<div class="section-header" id="browser-toggle" style="top:0">
+  <div class="section-label">Browse</div>
+  <span class="chevron" id="browser-chevron">▼</span>
+</div>
+<div id="browser-body" class="section-body">
+  <div class="empty-msg" id="browser-status">Loading library…</div>
+</div>
 
-        function clearPlaylist() {
-            const children = $("#playlist").children();
-            children.each((i, el) => {
-                URL.revokeObjectURL(el.attributes["data-node-url"]);
-            });
-            $("#playlist").empty();
-        }
+<!-- PLAYLIST -->
+<div class="section-header" id="playlist-toggle" style="top:0">
+  <div class="section-label">
+    Playlist
+    <span class="badge" id="track-count">0</span>
+  </div>
+  <div class="section-right" onclick="event.stopPropagation()">
+    <button class="btn-sm" id="btn-clear">Clear</button>
+    <button class="btn-sm" id="btn-shuffle-list">Shuffle</button>
+  </div>
+  <span class="chevron" id="playlist-chevron">▼</span>
+</div>
+<div id="playlist-body" class="section-body">
+  <ul id="track-list"></ul>
+  <div class="empty-msg" id="playlist-empty">Browse above to add tracks</div>
+</div>
 
-        function next() {
-            URL.revokeObjectURL($("#selected_audio").attr("src"))
-            const children = $("#playlist").children();
-            if (children.length == 0) {
-                $("#selected_audio").attr("src", "#");
-                $("#selected_filename").text("Nothing in playlist. Click on file to append");
-            } else {
-                const el = children[0];
-                $("#selected_audio").attr("src", el.attributes["data-node-url"]);
-                $("#selected_filename").text("Currently playing: " + el.attributes["data-node-text"]);
-                $("#selected_audio")[0].play();
-                el.remove();
-            }
-        }
-    </script>
+<audio id="audio-player"></audio>
+
+<script>
+const TREE_JSON_URL = 'tree.json';
+
+// ── State ─────────────────────────────────────────────
+let playlist = [];
+let currentId = null;
+let isPlaying = false;
+let nextId = 1;
+const expanded = {};
+let treeMap = new Map();
+let treeRoots = [];
+const audioPlayer = document.getElementById('audio-player');
+
+// ── DOM ───────────────────────────────────────────────
+const npTitle     = document.getElementById('np-title');
+const btnPlay     = document.getElementById('btn-play');
+const iconPlay    = document.getElementById('icon-play');
+const iconPause   = document.getElementById('icon-pause');
+const trackList   = document.getElementById('track-list');
+const trackCount  = document.getElementById('track-count');
+const emptyMsg    = document.getElementById('playlist-empty');
+const browserBody = document.getElementById('browser-body');
+const browserStatus = document.getElementById('browser-status');
+const seekTrack   = document.getElementById('seek-track');
+const seekFill    = document.getElementById('seek-fill');
+const seekThumb   = document.getElementById('seek-thumb');
+const timeCur     = document.getElementById('time-cur');
+const timeDur     = document.getElementById('time-dur');
+let isSeeking     = false;
+
+// ── Tree loading ──────────────────────────────────────
+async function loadTree() {
+  try {
+    const res = await fetch(TREE_JSON_URL);
+    if (!res.ok) throw new Error(res.statusText);
+    const data = await res.json();
+    buildTree(data);
+  } catch (e) {
+    browserStatus.textContent = 'Could not load ' + TREE_JSON_URL;
+  }
+}
+
+function buildTree(data) {
+  treeMap.clear(); treeRoots = [];
+  for (const n of data) {
+    treeMap.set(n.id, { id: n.id, text: n.text, parent: n.parent,
+      isFile: !!n.url, url: n.url, children: [] });
+  }
+  for (const n of treeMap.values()) {
+    if (n.parent === '#') treeRoots.push(n);
+    else { const p = treeMap.get(n.parent); if (p) p.children.push(n); }
+  }
+  renderTree();
+}
+
+// ── Tree rendering ────────────────────────────────────
+function renderTree() {
+  browserBody.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  for (const root of treeRoots) renderNode(root, 0, frag);
+  browserBody.appendChild(frag);
+}
+
+function renderNode(node, depth, container) {
+  const div = document.createElement('div');
+  div.className = 'tree-node ' + (node.isFile ? 'is-file' : 'is-folder');
+  div.dataset.id = node.id;
+
+  if (depth > 0) {
+    const ind = document.createElement('span');
+    ind.className = 'tree-indent';
+    ind.style.width = (depth * 16) + 'px';
+    div.appendChild(ind);
+  }
+
+  if (!node.isFile) {
+    const tog = document.createElement('button');
+    tog.className = 'tree-toggle';
+    tog.textContent = expanded[node.id] ? '▾' : '▸';
+    tog.addEventListener('click', () => { expanded[node.id] = !expanded[node.id]; renderTree(); });
+    div.appendChild(tog);
+  } else {
+    const sp = document.createElement('span');
+    sp.className = 'tree-indent'; sp.style.width = '28px';
+    div.appendChild(sp);
+  }
+
+  const label = document.createElement('span');
+  label.className = 'tree-label';
+  label.textContent = node.text;
+  if (!node.isFile) {
+    label.addEventListener('click', () => { expanded[node.id] = !expanded[node.id]; renderTree(); });
+  } else {
+    label.style.cursor = 'pointer';
+    label.addEventListener('click', () => addNodeToPlaylist(node.id));
+  }
+  div.appendChild(label);
+
+  const addBtn = document.createElement('button');
+  addBtn.className = 'tree-add';
+  addBtn.title = node.isFile ? 'Add track' : 'Add folder';
+  addBtn.textContent = '+';
+  addBtn.addEventListener('click', () => addNodeToPlaylist(node.id));
+  div.appendChild(addBtn);
+
+  container.appendChild(div);
+
+  if (!node.isFile && expanded[node.id]) {
+    for (const child of node.children) renderNode(child, depth + 1, container);
+  }
+}
+
+// ── Add to playlist ────────────────────────────────────
+function collectFiles(node) {
+  if (node.isFile) return [node];
+  return node.children.flatMap(collectFiles);
+}
+
+function addNodeToPlaylist(id) {
+  const node = treeMap.get(id);
+  if (!node) return;
+  const files = collectFiles(node);
+  let firstAdded = null;
+  for (const f of files) {
+    if (playlist.some(t => t.nodeId === f.id)) continue;
+    const track = { id: nextId++, nodeId: f.id, title: f.text.replace(/\.[^.]+$/, ''), url: f.url };
+    playlist.push(track);
+    if (!firstAdded) firstAdded = track;
+  }
+  if (!currentId && playlist.length) currentId = playlist[0].id;
+  // Auto-start if not playing and we added something
+  if (firstAdded && !isPlaying) {
+    if (!currentId) currentId = firstAdded.id;
+    const track = playlist.find(t => t.id === currentId);
+    if (track) { isPlaying = true; playTrack(track); }
+  }
+  renderNowPlaying();
+  renderPlaylist();
+}
+
+// ── Playlist ──────────────────────────────────────────
+function renderPlaylist() {
+  trackCount.textContent = playlist.length;
+  emptyMsg.style.display = playlist.length === 0 ? 'block' : 'none';
+  trackList.innerHTML = '';
+
+  playlist.forEach((track, i) => {
+    const li = document.createElement('li');
+    li.className = 'track-item' + (track.id === currentId ? ' active-track' : '');
+    li.dataset.id = track.id;
+    li.draggable = true;
+    li.innerHTML =
+      `<span class="drag-handle">⠿</span>` +
+      `<span class="item-num">${i + 1}</span>` +
+      `<span class="item-title">${esc(track.title)}</span>` +
+      `<button class="btn-delete" data-id="${track.id}">✕</button>`;
+
+    li.addEventListener('click', e => {
+      if (e.target.classList.contains('btn-delete') ||
+          e.target.classList.contains('drag-handle')) return;
+      currentId = track.id; isPlaying = true;
+      playTrack(track);
+      renderNowPlaying(); renderPlaylist();
+    });
+    li.querySelector('.btn-delete').addEventListener('click', e => {
+      e.stopPropagation(); removeTrack(track.id);
+    });
+
+    li.addEventListener('dragstart', onDragStart);
+    li.addEventListener('dragover',  onDragOver);
+    li.addEventListener('dragleave', onDragLeave);
+    li.addEventListener('drop',      onDrop);
+    li.addEventListener('dragend',   onDragEnd);
+    trackList.appendChild(li);
+  });
+}
+
+function renderNowPlaying() {
+  const cur = playlist.find(t => t.id === currentId);
+  npTitle.textContent = cur ? cur.title : 'No track selected';
+  iconPlay.style.display  = isPlaying ? 'none' : '';
+  iconPause.style.display = isPlaying ? '' : 'none';
+}
+
+// ── Playback ──────────────────────────────────────────
+function playTrack(track) {
+  if (!track || !track.url) return;
+  audioPlayer.src = track.url;
+  audioPlayer.play().catch(e => console.warn('Playback failed', e));
+}
+
+function formatTime(sec) {
+  if (!isFinite(sec)) return '0:00';
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+audioPlayer.addEventListener('play', () => {
+  isPlaying = true;
+  renderNowPlaying();
+});
+
+audioPlayer.addEventListener('pause', () => {
+  isPlaying = false;
+  renderNowPlaying();
+});
+
+audioPlayer.addEventListener('timeupdate', () => {
+  timeCur.textContent = formatTime(audioPlayer.currentTime);
+  timeDur.textContent = formatTime(audioPlayer.duration);
+  if (!isSeeking) updateSeekUI(audioPlayer.currentTime, audioPlayer.duration);
+});
+
+audioPlayer.addEventListener('ended', () => navigate(1));
+
+function updateSeekUI(cur, dur) {
+  const pct = (dur && isFinite(dur)) ? (cur / dur) * 100 : 0;
+  seekFill.style.width = pct + '%';
+  seekThumb.style.left = pct + '%';
+}
+
+function seekFraction(e) {
+  const rect = seekTrack.getBoundingClientRect();
+  return Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+}
+
+seekTrack.addEventListener('pointerdown', e => {
+  isSeeking = true;
+  seekTrack.setPointerCapture(e.pointerId);
+  const frac = seekFraction(e);
+  const dur = audioPlayer.duration;
+  if (dur && isFinite(dur)) updateSeekUI(frac * dur, dur);
+});
+
+seekTrack.addEventListener('pointermove', e => {
+  if (!isSeeking) return;
+  const frac = seekFraction(e);
+  const dur = audioPlayer.duration;
+  if (dur && isFinite(dur)) {
+    updateSeekUI(frac * dur, dur);
+    timeCur.textContent = formatTime(frac * dur);
+  }
+});
+
+seekTrack.addEventListener('pointerup', e => {
+  if (!isSeeking) return;
+  isSeeking = false;
+  const frac = seekFraction(e);
+  const dur = audioPlayer.duration;
+  if (dur && isFinite(dur)) {
+    audioPlayer.currentTime = frac * dur;
+    if (isPlaying) audioPlayer.play();
+  }
+});
+
+// ── Controls ──────────────────────────────────────────
+btnPlay.addEventListener('click', () => {
+  if (!playlist.length) return;
+  if (!currentId) currentId = playlist[0].id;
+  const track = playlist.find(t => t.id === currentId);
+  if (isPlaying) {
+    audioPlayer.pause();
+  } else {
+    if (audioPlayer.src !== track?.url) playTrack(track);
+    else audioPlayer.play();
+  }
+});
+document.getElementById('btn-prev').addEventListener('click', () => navigate(-1));
+document.getElementById('btn-next').addEventListener('click', () => navigate(1));
+
+function navigate(dir) {
+  if (!playlist.length) return;
+  const idx = playlist.findIndex(t => t.id === currentId);
+  currentId = playlist[(idx + dir + playlist.length) % playlist.length].id;
+  isPlaying = true;
+  const track = playlist.find(t => t.id === currentId);
+  playTrack(track);
+  renderNowPlaying(); renderPlaylist();
+}
+
+function removeTrack(id) {
+  playlist = playlist.filter(t => t.id !== id);
+  if (currentId === id) { 
+    audioPlayer.pause();
+    currentId = playlist[0]?.id ?? null; 
+    isPlaying = false; 
+  }
+  renderNowPlaying(); renderPlaylist();
+}
+
+document.getElementById('btn-clear').addEventListener('click', () => {
+  if (!playlist.length || !confirm('Clear the entire playlist?')) return;
+  audioPlayer.pause();
+  playlist = []; currentId = null; isPlaying = false;
+  renderNowPlaying(); renderPlaylist();
+});
+
+document.getElementById('btn-shuffle-list').addEventListener('click', () => {
+  for (let i = playlist.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [playlist[i], playlist[j]] = [playlist[j], playlist[i]];
+  }
+  renderPlaylist();
+});
+
+// ── Section toggles ───────────────────────────────────
+function makeToggle(headerId, bodyId, chevronId) {
+  let open = true;
+  document.getElementById(headerId).addEventListener('click', () => {
+    open = !open;
+    document.getElementById(bodyId).classList.toggle('collapsed', !open);
+    document.getElementById(chevronId).textContent = open ? '▼' : '▶';
+  });
+}
+makeToggle('browser-toggle', 'browser-body', 'browser-chevron');
+makeToggle('playlist-toggle', 'playlist-body', 'playlist-chevron');
+
+// ── Drag & drop reorder ────────────────────────────────
+let dragSrcId = null;
+function onDragStart(e) { dragSrcId = +this.dataset.id; this.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; }
+function onDragOver(e)  { e.preventDefault(); this.classList.add('drag-over'); }
+function onDragLeave()  { this.classList.remove('drag-over'); }
+function onDrop(e) {
+  e.preventDefault(); this.classList.remove('drag-over');
+  const to = +this.dataset.id; if (dragSrcId === to) return;
+  const fi = playlist.findIndex(t=>t.id===dragSrcId), ti = playlist.findIndex(t=>t.id===to);
+  const [item] = playlist.splice(fi,1); playlist.splice(ti,0,item);
+  renderPlaylist();
+}
+function onDragEnd() { document.querySelectorAll('.track-item').forEach(el=>el.classList.remove('dragging','drag-over')); }
+
+// ── Touch drag ────────────────────────────────────────
+let pId=null, pEl=null, pMir=null, pY=0;
+trackList.addEventListener('pointerdown', e => {
+  const h = e.target.closest('.drag-handle'); if (!h) return;
+  const li = h.closest('.track-item'); if (!li) return;
+  e.preventDefault();
+  pId=+li.dataset.id; pEl=li; pY=e.clientY;
+  pMir=li.cloneNode(true);
+  const r=li.getBoundingClientRect();
+  Object.assign(pMir.style,{position:'fixed',left:r.left+'px',top:r.top+'px',
+    width:li.offsetWidth+'px',opacity:'.85',background:'#222',zIndex:'999',pointerEvents:'none',boxShadow:'0 4px 16px #0008'});
+  document.body.appendChild(pMir); li.style.opacity='.3';
+  h.setPointerCapture(e.pointerId);
+},{passive:false});
+
+trackList.addEventListener('pointermove', e => {
+  if (!pId) return; e.preventDefault();
+  const dy=e.clientY-pY; pY=e.clientY;
+  pMir.style.top=(parseFloat(pMir.style.top)+dy)+'px';
+  pMir.style.display='none';
+  const el=document.elementFromPoint(e.clientX,e.clientY);
+  pMir.style.display='';
+  const over=el&&el.closest('.track-item');
+  document.querySelectorAll('.track-item').forEach(l=>l.classList.remove('drag-over'));
+  if (over&&over!==pEl) over.classList.add('drag-over');
+},{passive:false});
+
+trackList.addEventListener('pointerup', () => {
+  if (!pId) return;
+  pMir&&pMir.remove(); pMir=null;
+  if (pEl) pEl.style.opacity='';
+  const over=document.querySelector('.track-item.drag-over');
+  if (over) {
+    const tid=+over.dataset.id;
+    if (tid!==pId) {
+      const fi=playlist.findIndex(t=>t.id===pId), ti=playlist.findIndex(t=>t.id===tid);
+      const [item]=playlist.splice(fi,1); playlist.splice(ti,0,item);
+    }
+    over.classList.remove('drag-over');
+  }
+  pId=null; pEl=null; renderPlaylist();
+});
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+renderNowPlaying();
+renderPlaylist();
+loadTree();
+</script>
 </body>
-
 </html>

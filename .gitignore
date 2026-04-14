@@ -1,3 +1,2 @@
 .env
-filenames.json
-public/tree.json
+node_modules
